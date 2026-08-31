@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk QR Code Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Bulk QR Code Generator</h1>
+      <p class="subtitle">Turn a spreadsheet of links into thousands of QR codes — entirely in your browser. Built for runs of 50,000+.</p>
+    </div>
+    <button id="theme-toggle" class="btn btn-ghost" title="Toggle dark/light theme">🌓</button>
+  </header>
+
+  <main>
+    <p class="privacy-note">🔒 Nothing here is uploaded anywhere — your file, links, and generated codes never leave this browser tab.</p>
+
+    <!-- Step 1: Upload -->
+    <section class="card" id="step-upload">
+      <h2>1. Upload your data</h2>
+      <div id="dropzone" class="dropzone">
+        <p><strong>Drag &amp; drop</strong> a CSV or Excel file here, or click to browse.</p>
+        <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden />
+      </div>
+      <div class="row-between">
+        <span id="file-info" class="muted"></span>
+        <button id="sample-template-btn" class="btn btn-link">Download a sample CSV template</button>
+      </div>
+    </section>
+
+    <!-- Step 2: Columns & preview -->
+    <section class="card hidden" id="step-columns">
+      <h2>2. Map your columns</h2>
+      <div class="options-grid">
+        <label>
+          <input type="checkbox" id="has-header" checked />
+          First row is a header
+        </label>
+        <label>
+          Name / filename column
+          <select id="name-col"></select>
+        </label>
+        <label>
+          Data column
+          <select id="data-col"></select>
+        </label>
+        <label>
+          Data column contains
+          <select id="input-type">
+            <option value="url">A link or text to encode as a QR code</option>
+            <option value="base64_image">An existing base64 image (decode &amp; upscale)</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-scroll">
+        <table id="preview-table"></table>
+      </div>
+      <p class="muted" id="row-count-note"></p>
+    </section>
+
+    <!-- Step 3: Options -->
+    <section class="card hidden" id="step-options">
+      <h2>3. Options</h2>
+      <div class="options-grid">
+        <label id="output-format-field">
+          Output format
+          <select id="output-format">
+            <option value="svg">SVG (vector, best for scale &amp; print)</option>
+            <option value="png">PNG (raster image)</option>
+            <option value="base64">Base64 CSV (one string per row, no image files)</option>
+          </select>
+        </label>
+        <label>
+          Error correction
+          <select id="error-correction">
+            <option value="L">L — ~7% (smallest code)</option>
+            <option value="M">M — ~15%</option>
+            <option value="Q">Q — ~25%</option>
+            <option value="H" selected>H — ~30% (most damage-resistant)</option>
+          </select>
+        </label>
+        <label id="box-size-field">
+          Box size (px per module)
+          <input type="number" id="box-size" min="1" max="40" value="10" />
+        </label>
+        <label>
+          Border (modules)
+          <input type="number" id="border" min="0" max="20" value="4" />
+        </label>
+        <label id="fg-color-field">
+          Foreground color
+          <input type="color" id="fg-color" value="#000000" />
+        </label>
+        <label id="bg-color-field">
+          Background color
+          <input type="color" id="bg-color" value="#ffffff" />
+        </label>
+        <label id="upscale-field" class="hidden">
+          Upscale factor (base64 image mode)
+          <input type="number" id="upscale-factor" min="1" max="20" value="10" />
+        </label>
+        <label>
+          Parallel workers
+          <input type="number" id="worker-count" min="1" max="32" value="4" />
+        </label>
+        <label>
+          Batch size per task
+          <input type="number" id="batch-size" min="10" max="2000" value="250" />
+        </label>
+      </div>
+
+      <fieldset class="output-target">
+        <legend>Where should the files go?</legend>
+        <label class="radio-row">
+          <input type="radio" name="target" id="target-folder" value="folder" />
+          Save straight to a folder on disk <span class="badge">recommended for 50k+</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="target" id="target-zip" value="zip" checked />
+          Download as ZIP file(s)
+        </label>
+        <label id="zip-part-size-field">
+          Max files per ZIP part
+          <input type="number" id="zip-part-size" min="100" max="20000" value="5000" />
+          <span class="muted">Large runs are split into several ZIPs to avoid running out of browser memory.</span>
+        </label>
+        <p id="folder-unsupported" class="warning hidden">Your browser doesn't support saving directly to a folder (this needs Chrome or Edge). Use ZIP download instead.</p>
+      </fieldset>
+
+      <div class="row-between">
+        <button id="validate-btn" class="btn btn-secondary">Validate data</button>
+        <button id="preview-btn" class="btn btn-secondary">Preview one QR code</button>
+      </div>
+      <div id="validation-summary" class="summary hidden"></div>
+      <div id="preview-output" class="preview-output hidden"></div>
+    </section>
+
+    <!-- Step 4: Generate -->
+    <section class="card hidden" id="step-generate">
+      <h2>4. Generate</h2>
+      <div class="row-between">
+        <button id="generate-btn" class="btn btn-primary">Generate QR codes</button>
+        <div class="btn-group">
+          <button id="pause-btn" class="btn btn-secondary" disabled>Pause</button>
+          <button id="cancel-btn" class="btn btn-danger" disabled>Cancel</button>
+        </div>
+      </div>
+      <div class="progress-wrap hidden" id="progress-wrap">
+        <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+        <div class="progress-stats">
+          <span id="stat-progress">0 / 0</span>
+          <span id="stat-success">✅ 0</span>
+          <span id="stat-errors">⚠️ 0</span>
+          <span id="stat-speed">-- codes/s</span>
+          <span id="stat-eta">ETA --</span>
+        </div>
+      </div>
+      <div id="result-panel" class="result-panel hidden"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>Runs 100% locally. Pairs with the repo's <code>qrcode_gen.py</code> batch CLI for offline/desktop use.</p>
+  </footer>
+
+  <script src="vendor/main-libs.bundle.js"></script>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

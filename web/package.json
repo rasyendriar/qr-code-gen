@@ -1,0 +1,16 @@
+{
+  "name": "qr-bulk-webapp",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Static web app for bulk QR code generation, build tooling only (no server required to run the app).",
+  "scripts": {
+    "build": "node build/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "jszip": "^3.10.1",
+    "papaparse": "^5.7.0",
+    "qrcode": "^1.5.4",
+    "xlsx": "^0.18.5"
+  }
+}
