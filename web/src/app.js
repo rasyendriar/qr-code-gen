@@ -162,6 +162,7 @@ function populateColumnStep() {
   dataSelect.value = colCount > 1 ? '1' : '0';
 
   renderPreviewTable();
+  autoDetectInputType();
 }
 
 function renderPreviewTable() {
@@ -207,17 +208,53 @@ $('has-header').addEventListener('change', () => {
   resetValidation();
 });
 $('name-col').addEventListener('change', resetValidation);
-$('data-col').addEventListener('change', resetValidation);
+$('data-col').addEventListener('change', () => {
+  autoDetectInputType();
+  resetValidation();
+});
 
-$('input-type').addEventListener('change', () => {
+function applyInputTypeVisibility() {
   const isBase64Image = $('input-type').value === 'base64_image';
   $('output-format-field').classList.toggle('hidden', isBase64Image);
   $('box-size-field').classList.toggle('hidden', isBase64Image);
   $('fg-color-field').classList.toggle('hidden', isBase64Image);
   $('bg-color-field').classList.toggle('hidden', isBase64Image);
   $('upscale-field').classList.toggle('hidden', !isBase64Image);
+}
+
+$('input-type').addEventListener('change', () => {
+  applyInputTypeVisibility();
+  $('input-type-note').classList.add('hidden'); // manual choice overrides the auto-detect hint
   resetValidation();
 });
+
+// A base64 data: URI is unmistakable and unencodable as new QR data (a QR code
+// tops out around 4,296 characters, these run into the thousands), so if the
+// data column looks like one, switch modes automatically instead of making
+// every user learn to flip this dropdown themselves.
+function looksLikeBase64Image(value) {
+  if (typeof value !== 'string') return false;
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value.trim());
+}
+
+function autoDetectInputType() {
+  const dataColIdx = Number($('data-col').value);
+  const hasHeader = $('has-header').checked;
+  const dataRows = hasHeader ? rawRows.slice(1) : rawRows;
+  const sample = dataRows.slice(0, 10).map((row) => row[dataColIdx]);
+  if (!sample.length) return;
+
+  const matchCount = sample.filter(looksLikeBase64Image).length;
+  const note = $('input-type-note');
+  if (matchCount / sample.length >= 0.5) {
+    $('input-type').value = 'base64_image';
+    applyInputTypeVisibility();
+    note.textContent = '🔎 Detected base64 image data in this column — switched "Data column contains" to base64 image decode mode automatically.';
+    note.classList.remove('hidden');
+  } else {
+    note.classList.add('hidden');
+  }
+}
 
 $('output-format').addEventListener('change', resetValidation);
 
