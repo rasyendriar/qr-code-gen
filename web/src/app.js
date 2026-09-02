@@ -163,6 +163,7 @@ function populateColumnStep() {
 
   renderPreviewTable();
   autoDetectInputType();
+  updateRangeSummary();
 }
 
 function renderPreviewTable() {
@@ -207,9 +208,13 @@ $('has-header').addEventListener('change', () => {
   populateColumnStep();
   resetValidation();
 });
-$('name-col').addEventListener('change', resetValidation);
+$('name-col').addEventListener('change', () => {
+  updateRangeSummary();
+  resetValidation();
+});
 $('data-col').addEventListener('change', () => {
   autoDetectInputType();
+  updateRangeSummary();
   resetValidation();
 });
 
@@ -270,7 +275,7 @@ updateTargetVisibility();
 // ---------------------------------------------------------------------------
 // Building & validating records
 // ---------------------------------------------------------------------------
-function buildRecords() {
+function buildAllRecords() {
   const nameColIdx = Number($('name-col').value);
   const dataColIdx = Number($('data-col').value);
   const hasHeader = $('has-header').checked;
@@ -281,6 +286,65 @@ function buildRecords() {
     name: row[nameColIdx],
     value: row[dataColIdx],
   }));
+}
+
+function getRangeMode() {
+  const el = document.querySelector('input[name="range-mode"]:checked');
+  return el ? el.value : 'all';
+}
+
+// Applies the "Which rows should be generated?" filter on top of every row
+// the file actually has. Name-range comparison is plain string <=/>= on the
+// sanitized name, which sorts correctly for equal-width zero-padded IDs
+// (e.g. T-000000001..T-000000050) — the shape the app auto-detects/expects.
+function applyRange(records) {
+  const mode = getRangeMode();
+  if (mode === 'count') {
+    const n = Math.max(0, Math.floor(Number($('range-count').value)) || 0);
+    return records.slice(0, n);
+  }
+  if (mode === 'name') {
+    const start = sanitizeName($('range-name-start').value);
+    const end = sanitizeName($('range-name-end').value);
+    if (!start && !end) return records;
+    return records.filter((r) => {
+      const name = sanitizeName(r.name);
+      if (!name) return false;
+      if (start && name < start) return false;
+      if (end && name > end) return false;
+      return true;
+    });
+  }
+  return records;
+}
+
+function buildRecords() {
+  return applyRange(buildAllRecords());
+}
+
+function updateRangeSummary() {
+  if (!rawRows.length) return;
+  const totalInFile = buildAllRecords().length;
+  const selected = buildRecords().length;
+  const summary = $('range-summary');
+  if (getRangeMode() === 'all') {
+    summary.textContent = '';
+  } else {
+    summary.textContent = `Selected ${selected.toLocaleString()} of ${totalInFile.toLocaleString()} rows in the file.`;
+  }
+}
+
+for (const radio of document.querySelectorAll('input[name="range-mode"]')) {
+  radio.addEventListener('change', () => {
+    updateRangeSummary();
+    resetValidation();
+  });
+}
+for (const id of ['range-count', 'range-name-start', 'range-name-end']) {
+  $(id).addEventListener('input', () => {
+    updateRangeSummary();
+    resetValidation();
+  });
 }
 
 function resetValidation() {
@@ -508,10 +572,13 @@ generateBtn.addEventListener('click', async () => {
   // Batches from different workers can complete in overlapping ticks; chaining
   // every onBatchDone call through one promise keeps zip/CSV writes strictly
   // sequential so a flush never races an add() into the archive it just reset.
+  // The pool awaits the returned promise before dispatching that worker's next
+  // batch, which is what keeps generation from racing ahead of archiving.
   let writeQueue = Promise.resolve();
   updateProgress(0, total, 0, 0, startTime);
   await pool.run(batches, opts, target, (results) => {
     writeQueue = writeQueue.then(() => onBatchDone(results));
+    return writeQueue;
   });
   await writeQueue;
 

@@ -72,10 +72,20 @@ export class WorkerPool {
       };
 
       for (const worker of this.workers) {
-        const handler = (evt) => {
+        // Wait for onBatchDone (writing/zipping this batch) before handing the
+        // worker another one. Without this, generation — which is fast and
+        // parallel — races far ahead of archiving — which is slower and
+        // serialized — so results pile up and the UI only sees them in a
+        // burst whenever a ZIP part finally finishes compressing. Awaiting
+        // here caps how far ahead generation can get, which both bounds
+        // memory and keeps progress updates arriving smoothly.
+        const handler = async (evt) => {
           if (evt.data.type !== 'batchDone') return;
+          // Stay marked busy through the await so a pause/resume in the
+          // meantime can't have _pump() hand this worker a second batch
+          // before its current one has actually finished writing.
+          await onBatchDone(evt.data.results);
           this.busy.delete(worker);
-          onBatchDone(evt.data.results);
           remaining--;
           if (remaining <= 0) {
             for (const w of this.workers) w.removeEventListener('message', w.__poolHandler);

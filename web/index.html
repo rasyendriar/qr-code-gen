@@ -114,6 +114,29 @@
       </div>
 
       <fieldset class="output-target">
+        <legend>Which rows should be generated?</legend>
+        <label class="radio-row">
+          <input type="radio" name="range-mode" id="range-all" value="all" checked />
+          All rows
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="range-mode" id="range-count-mode" value="count" />
+          Only the first
+          <input type="number" id="range-count" min="1" value="100" class="inline-input" />
+          rows
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="range-mode" id="range-name-mode" value="name" />
+          Name range from
+          <input type="text" id="range-name-start" placeholder="e.g. T-000000001" class="inline-input wide" />
+          to
+          <input type="text" id="range-name-end" placeholder="e.g. T-000000050" class="inline-input wide" />
+        </label>
+        <p class="muted">The name range compares sanitized names alphabetically (inclusive) — works correctly for zero-padded sequential IDs like <code>T-000000001</code>. Leave either box empty for an open-ended range.</p>
+        <p class="muted" id="range-summary"></p>
+      </fieldset>
+
+      <fieldset class="output-target">
         <legend>Where should the files go?</legend>
         <label class="radio-row">
           <input type="radio" name="target" id="target-folder" value="folder" />
